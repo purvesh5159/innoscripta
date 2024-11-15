@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Services\NewsService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -13,7 +14,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+        // Register NewsService for dependency injection
+        $this->app->singleton(NewsService::class, function ($app) {
+            return new NewsService();
+        });
     }
 
     /**
