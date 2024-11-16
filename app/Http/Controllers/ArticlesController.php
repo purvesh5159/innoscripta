@@ -1,9 +1,8 @@
 <?php
-
 namespace App\Http\Controllers;
-
 use App\Services\NewsService;
 use Illuminate\Http\Request;
+use App\Models\Article;
 
 class ArticlesController extends Controller
 {
@@ -27,7 +26,7 @@ class ArticlesController extends Controller
         ];
 
         $articles = [];
-        $sources = ['newsapi', 'guardian', 'nytimes'];  // Supported news sources
+        $sources = ['newsapi', 'nytimes'];  // Supported news sources
 
         // Fetch articles from all sources
         foreach ($sources as $source) {
@@ -49,7 +48,7 @@ class ArticlesController extends Controller
     }
 
     // Search for articles with filters
-    public function search(Request $request)
+    public function search(Request $request, NewsService $newsService)
     {
         $params = [
             'q' => $request->input('keyword'),
@@ -57,27 +56,25 @@ class ArticlesController extends Controller
             'category' => $request->input('category'),
             'source' => $request->input('source'),
         ];
-
+    
         $articles = [];
-        $sources = ['newsapi', 'guardian', 'nytimes'];
-
-        // Fetch articles from sources
+        $sources = ['newsapi', 'nytimes'];
+    
         foreach ($sources as $source) {
             if (!$request->has('source') || $request->input('source') === $source) {
-                $response = $this->newsService->{"fetchFrom" . ucfirst($source)}($params);
-                $articles = array_merge($articles, $response['articles'] ?? []);
+                $articles = array_merge($articles, $newsService->{"fetchFrom" . ucfirst($source)}($params)['articles'] ?? []);
             }
         }
-
+    
         return response()->json(['data' => $articles]);
     }
+    
 
     // Retrieve a single article by ID
     public function show($id, Request $request)
     {
         // Check for the article in each source
         $article = $this->newsService->fetchFromNewsAPI(['id' => $id])['article'] ??
-                   $this->newsService->fetchFromGuardian(['id' => $id])['article'] ??
                    $this->newsService->fetchFromNYTimes(['id' => $id])['article'];
 
         // Return error if not found
@@ -87,4 +84,55 @@ class ArticlesController extends Controller
 
         return response()->json(['data' => $article]);
     }
+
+    public function personalizedFeed(Request $request, NewsService $newsService)
+    {
+        $preferences = auth()->user()->preference;
+
+        if (!$preferences) {
+            return response()->json(['message' => 'Please set preferences first'], 400);
+        }
+
+        $params = [
+            'sources' => $preferences->sources,
+            'categories' => $preferences->categories,
+            'authors' => $preferences->authors,
+        ];
+
+        $articles = [];
+        $sources = ['newsapi', 'nytimes'];
+
+        foreach ($sources as $source) {
+            $articles = array_merge($articles, $newsService->{"fetchFrom" . ucfirst($source)}($params)['articles'] ?? []);
+        }
+
+        return response()->json(['data' => array_slice($articles, 0, 10)]); // paginated, adjust as needed
+    }
+
+    //retrive local articles data
+    public function searcharticles(Request $request)
+    {
+        $query = Article::query();
+
+        if ($request->filled('keyword')) {
+            $query->where('title', 'like', '%' . $request->keyword . '%');
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where('published_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where('published_at', '<=', $request->date_to);
+        }
+
+        if ($request->filled('source')) {
+            $query->where('source', $request->source);
+        }
+
+        $articles = $query->paginate(10);  // Pagination for large datasets
+
+        return response()->json($articles);
+    }
+
 }

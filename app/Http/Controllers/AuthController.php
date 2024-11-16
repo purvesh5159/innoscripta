@@ -1,35 +1,40 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Validator;
+
 
 class AuthController extends Controller
 {
     //register user
     public function register(Request $request)
     {
+       
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+       
         $user = User::create([
-            'name' => $request->firstname,
-            'lastname' => $request->lastname,
+            'name' => $request->name,
             'email' => $request->email,
-            'phone' => $request->phone,
-            'dob' => $request->dob,
-            'gender' => $request->gender,
-            'city' => $request->city,
-            'country' => $request->country,
             'password' => Hash::make($request->password),
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json(['access_token' => $token, 'token_type' => 'Bearer']);
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'message' => ' User registered successfully'
+        ]);
     }
 
     //login
@@ -42,7 +47,11 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->firstOrFail();
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json(['access_token' => $token, 'token_type' => 'Bearer']);
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'message' => ' User Login successfully',
+        ]);
     }
 
     //logout
@@ -52,31 +61,28 @@ class AuthController extends Controller
         return response()->json(['message' => ' User Logged out successfully']);
     }
 
-    //reset password
-    public function resetPassword(Request $request)
+   // Password Reset without sending email
+   public function resetPassword(Request $request)
     {
+        // Input validation
         $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string|min:8|confirmed',
-            'token' => 'required|string'
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
         ]);
 
-        // Assuming Laravel’s default Password Broker is used
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user, $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->save();
-            }
-        );
+        // Get the currently authenticated user
+        $user = Auth::user();
 
-        return $status === Password::PASSWORD_RESET
-            ? response()->json(['message' => 'Password reset successfully'])
-            : response()->json(['message' => 'Password reset failed'], 500);
+        // Check if the current password matches
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'Current password is incorrect'], 400);
+        }
+
+        // Update the password
+        $user->password = Hash::make($request->new_password);
+        $user->save();
+
+        return response()->json(['message' => 'Password reset successfully']);
     }
-
-
-
 
 }

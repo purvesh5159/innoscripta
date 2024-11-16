@@ -10,8 +10,10 @@ class NewsService
 {
     public function fetchFromNewsAPI($params)
     {
-        $response = Http::get('https://newsapi.org/v2/everything', array_merge($params, [
-            'apiKey' => env('NEWS_API_KEY')
+        $response = Http::withOptions([
+            'verify' => false,  // Disable SSL certificate verification
+        ])->get('https://newsapi.org/v2/everything', array_merge($params, [
+            'api-key' => env('NEWS_API_KEY')
         ]));
         
         return $response->json();
@@ -19,10 +21,11 @@ class NewsService
 
     public function fetchFromNYTimes($params)
     {
-        $response = Http::get('https://api.nytimes.com/svc/search/v2/articlesearch.json', array_merge($params, [
+        $response = Http::withOptions([
+            'verify' => false,  // Disable SSL certificate verification
+        ])->get('https://api.nytimes.com/svc/search/v2/articlesearch.json', array_merge($params, [
             'api-key' => env('NYTIMES_API_KEY')
         ]));
-        
         return $response->json();
     }
 }
