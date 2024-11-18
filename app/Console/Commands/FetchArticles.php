@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\NewsService;
 use App\Models\Article;
 use Illuminate\Console\Command;
+use App\Http\Controllers\ArticlesController;
 
 class FetchArticles extends Command
 {
@@ -16,34 +17,11 @@ class FetchArticles extends Command
         parent::__construct();
     }
 
-    public function handle(NewsService $newsService)
+    public function handle()
     {
-        $params = [
-            'q' => 'latest',
-            'page' => 1,
-        ];
-
-        $articles = [];
-        $sources = ['newsapi', 'nytimes']; 
-
-        foreach ($sources as $source) {
-            $articles = array_merge($articles, $newsService->{"fetchFrom" . ucfirst($source)}($params)['articles'] ?? []);
-        }
-
-        foreach ($articles as $articleData) {
-            Article::updateOrCreate(
-                ['source_id' => $articleData['source']['id']],  
-                [
-                    'title' => $articleData['title'],
-                    'description' => $articleData['description'],
-                    'url' => $articleData['url'],
-                    'published_at' => $articleData['publishedAt'],
-                    'source' => $articleData['source']['name'],
-                ]
-            );
-        }
-
-        $this->info('Articles fetched and stored successfully!');
+        $controller = app(ArticlesController::class);
+        $controller->fetchAndStoreArticles();
+        $this->info('Articles fetched and stored successfully.');
     }
     
 }

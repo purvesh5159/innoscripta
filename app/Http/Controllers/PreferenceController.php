@@ -1,7 +1,10 @@
 <?php
 namespace App\Http\Controllers;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use App\Models\Preference;
+use App\Models\Article;
+use App\Models\User;
 
 class PreferenceController extends Controller
 {
@@ -33,6 +36,4 @@ class PreferenceController extends Controller
 
         return response()->json(['data' => $preference]);
     }
-
-
 }

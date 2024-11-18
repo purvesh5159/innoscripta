@@ -19,14 +19,9 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'lastname',
         'email',
         'password',
-        'phone',
-        'city',
-        'dob',
-        'gender',
-        'country',
+       
     ];
 
     /**
@@ -47,4 +42,9 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    public function preference()
+    {
+        return $this->hasOne(Preference::class);
+    }
 }

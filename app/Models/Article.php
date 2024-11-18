@@ -11,9 +11,11 @@ class Article extends Model
     protected $fillable = [
         'title',
         'description',
+        'author',
+        'source',
         'url',
         'published_at',
-        'source', 
-        'source_id'
     ];
+
+    protected $dates = ['published_at'];
 }

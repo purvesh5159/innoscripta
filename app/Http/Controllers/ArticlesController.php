@@ -1,83 +1,202 @@
 <?php
 namespace App\Http\Controllers;
-use App\Services\NewsService;
+
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use App\Services\NewsService;
 use App\Models\Article;
+use App\Models\Preference;
+use Illuminate\Support\Facades\Log;
 
 class ArticlesController extends Controller
 {
     protected $newsService;
 
-    // Inject NewsService into the controller
     public function __construct(NewsService $newsService)
     {
         $this->newsService = $newsService;
     }
 
-    // Fetch articles with pagination
+    // Main method to fetch articles
     public function index(Request $request)
     {
         // Extract query parameters for searching
         $params = [
-            'q' => $request->input('keyword'),
-            'from' => $request->input('date'),
+            'keyword' => $request->input('keyword'),
+            'source' => $request->input('source'),
             'category' => $request->input('category'),
-            'page' => $request->input('page', 1)  // Default to page 1 if not provided
+            'date' => $request->input('date'),
+            'page' => $request->input('page', 1),  // Default to page 1 if not provided
         ];
 
-        $articles = [];
-        $sources = ['newsapi', 'nytimes'];  // Supported news sources
+        // Validate that if the source is 'newsapi', the 'keyword' must be provided
+        if ($params['source'] === 'newsapi' && empty($params['keyword'])) {
+            return response()->json(['message' => 'Keyword is required when using NewsAPI source.'], 400);
+        }
 
-        // Fetch articles from all sources
-        foreach ($sources as $source) {
-            $response = $this->newsService->{"fetchFrom" . ucfirst($source)}($params);
-            $articles = array_merge($articles, $response['articles'] ?? []);  // Merge articles
+        // Initialize an array to hold the articles from all sources
+        $articles = [];
+
+        // If a source is specified, fetch from that source
+        if ($params['source'] === 'nytimes') {
+            $nyTimesArticles = $this->newsService->fetchFromNYTimes($params);  // Fetch from NY Times
+            $articles = array_merge($articles, $nyTimesArticles); // Merge the articles from NY Times
+        } elseif ($params['source'] === 'newsapi') {
+            $newsApiArticles = $this->newsService->fetchFromNewsAPI($params);  // Fetch from NewsAPI
+            $articles = array_merge($articles, $newsApiArticles); // Merge the articles from NewsAPI
+        } elseif ($params['source'] === 'guardian') {
+            $guardianArticles = $this->newsService->fetchFromGuardian($params);  // Fetch from Guardian
+            $articles = array_merge($articles, $guardianArticles); // Merge the articles from Guardian
+        } else {
+            // If no specific source is provided, fetch from all sources
+            $nyTimesArticles = $this->newsService->fetchFromNYTimes($params);
+            $newsApiArticles = $this->newsService->fetchFromNewsAPI($params);
+            $guardianArticles = $this->newsService->fetchFromGuardian($params);
+            
+            // Merge all articles from NYTimes, NewsAPI, and Guardian
+            $articles = array_merge($nyTimesArticles, $newsApiArticles, $guardianArticles);
+        }
+
+        // Filter and process valid articles (non-empty articles)
+        $validArticles = [];
+        foreach ($articles as $article) {
+            // For NewsAPI
+            if ($params['source'] === 'newsapi' || $params['source'] === null) {
+                if (!empty($article['title']) && !empty($article['url'])) {
+                    $validArticles[] = [
+                        'source' => 'NewsAPI',
+                        'title' => $article['title'] ?? '',
+                        'description' => $article['description'] ?? '',
+                        'publishedAt' => $article['publishedAt'] ?? '',
+                    ];
+                }
+            }
+
+            // For NYTimes
+            if ($params['source'] === 'nytimes' || $params['source'] === null) {
+                if (!empty($article['headline']['main']) && !empty($article['web_url'])) {
+                    $validArticles[] = [
+                        'source' => 'NewYorkTimes',
+                        'title' => $article['headline']['main'] ?? '',
+                        'description' => $article['lead_paragraph'] ?? '',
+                        'publishedAt' => $article['pub_date'] ?? '',
+                    ];
+                }
+            }
+
+            // For Guardian
+            if ($params['source'] === 'guardian' || $params['source'] === null) {
+                if (!empty($article['webTitle']) && !empty($article['webUrl'])) {
+                    $validArticles[] = [
+                        'source' => 'Guardian',
+                        'title' => $article['webTitle'] ?? '',
+                        'description' => $article['apiUrl'] ?? '',
+                        'publishedAt' => $article['webPublicationDate'] ?? '',
+                    ];
+                }
+            }
         }
 
         // Paginate the results (you can adjust pagination logic as needed)
-        $paginatedArticles = array_slice($articles, ($params['page'] - 1) * 10, 10); // Paginate 10 per page
+        $perPage = 10;
+        $paginatedArticles = array_slice($validArticles, ($params['page'] - 1) * $perPage, $perPage); // Paginate 10 per page
 
         return response()->json([
             'data' => $paginatedArticles,
             'pagination' => [
                 'current_page' => $params['page'],
-                'total' => count($articles),
-                'per_page' => 10
+                'total' => count($validArticles),
+                'per_page' => $perPage
             ]
         ]);
     }
 
-    // Search for articles with filters
-    public function search(Request $request, NewsService $newsService)
+    // Method to fetch and store articles from different sources
+    public function fetchAndStoreArticles()
     {
-        $params = [
-            'q' => $request->input('keyword'),
-            'from' => $request->input('date'),
-            'category' => $request->input('category'),
-            'source' => $request->input('source'),
+        $query = 'latest'; // Example topic
+        $sources = [
+            'NewsAPI' => fn() => $this->newsService->fetchFromNewsAPI($query),
+            'NYTimes' => fn() => $this->newsService->fetchFromNYTimes($query),
+            'Guardian' => fn() => $this->newsService->fetchFromGuardian($query),
         ];
-    
-        $articles = [];
-        $sources = ['newsapi', 'nytimes'];
-    
-        foreach ($sources as $source) {
-            if (!$request->has('source') || $request->input('source') === $source) {
-                $articles = array_merge($articles, $newsService->{"fetchFrom" . ucfirst($source)}($params)['articles'] ?? []);
+
+        foreach ($sources as $sourceName => $fetcher) {
+            try {
+                // Log the response to check if we get data
+                $response = $fetcher();
+                \Log::info("Fetched articles from {$sourceName}", ['response' => $response]);
+
+                // Only save articles if there is a response
+                if (count($response) > 0) {
+                    $this->saveArticles($response, $sourceName);
+                } else {
+                    \Log::warning("No articles fetched from {$sourceName}");
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to fetch articles from {$sourceName}: " . $e->getMessage());
             }
         }
-    
-        return response()->json(['data' => $articles]);
+
+        return response()->json(['message' => 'Articles fetched and stored successfully']);
     }
-    
+
+    private function saveArticles($response, $source)
+    {
+        foreach ($response as $article) {
+            try {
+                $data = $this->mapArticleData($article, $source);
+                \Log::info("Saving article data", $data);
+                Article::updateOrCreate(['url' => $data['url']], $data);
+            } catch (\Exception $e) {
+                Log::error("Failed to save article from {$source}: " . $e->getMessage());
+            }
+        }
+    }
+
+    private function mapArticleData($article, $source)
+    {
+        \Log::info("Mapping data for source {$source}", ['article' => $article]);
+
+        switch ($source) {
+            case 'NewsAPI':
+                return [
+                    'title' => $article['title'],
+                    'description' => $article['description'] ?? null,
+                    'author' => $article['author'] ?? 'Unknown',
+                    'source' => 'NewsAPI',
+                    'url' => $article['url'],
+                    'published_at' => $article['publishedAt'] ?? now(),
+                ];
+            case 'NYTimes':
+                return [
+                    'title' => $article['headline']['main'],
+                    'description' => $article['lead_paragraph'] ?? null,
+                    'author' => $article['byline']['original'] ?? 'Unknown',
+                    'source' => 'NYTimes',
+                    'url' => $article['web_url'],
+                    'published_at' => $article['pub_date'] ?? now(),
+                ];
+            case 'Guardian':
+                return [
+                    'title' => $article['webTitle'],
+                    'content' => $article['description'] ?? 'No description available',
+                    'author' => 'Unknown',
+                    'source' => 'Guardian',
+                    'url' => $article['webUrl'],
+                    'published_at' => $article['webPublicationDate'] ?? now(),
+                ];
+            default:
+                throw new \Exception('Unknown source');
+        }
+    }
 
     // Retrieve a single article by ID
     public function show($id, Request $request)
     {
-        // Check for the article in each source
-        $article = $this->newsService->fetchFromNewsAPI(['id' => $id])['article'] ??
+        $article = $this->newsService->fetchFromNewsAPI(['id' => $id])['article'] ?? 
                    $this->newsService->fetchFromNYTimes(['id' => $id])['article'];
 
-        // Return error if not found
         if (!$article) {
             return response()->json(['message' => 'Article not found'], 404);
         }
@@ -85,32 +204,45 @@ class ArticlesController extends Controller
         return response()->json(['data' => $article]);
     }
 
-    public function personalizedFeed(Request $request, NewsService $newsService)
+    public function personalizedFeed(Request $request)
     {
-        $preferences = auth()->user()->preference;
+        // Retrieve the user's preferences from the database
+        $preference = Preference::where('user_id', Auth::id())->first();
 
-        if (!$preferences) {
-            return response()->json(['message' => 'Please set preferences first'], 400);
+        // Check if preferences exist
+        if (!$preference) {
+            return response()->json(['message' => 'No preferences found'], 404);
         }
 
-        $params = [
-            'sources' => $preferences->sources,
-            'categories' => $preferences->categories,
-            'authors' => $preferences->authors,
-        ];
+        // Initialize the query for fetching articles
+        $query = Article::query();
 
-        $articles = [];
-        $sources = ['newsapi', 'nytimes'];
-
-        foreach ($sources as $source) {
-            $articles = array_merge($articles, $newsService->{"fetchFrom" . ucfirst($source)}($params)['articles'] ?? []);
+        // Check if preferred sources are available and apply filtering
+        if (!empty($preference->sources) && is_array($preference->sources)) {
+            $query->whereIn('source', $preference->sources);
         }
 
-        return response()->json(['data' => array_slice($articles, 0, 10)]); // paginated, adjust as needed
+        // Check if preferred categories are available and apply filtering
+        if (!empty($preference->categories) && is_array($preference->categories)) {
+            foreach ($preference->categories as $category) {
+                // Use orWhere to apply 'LIKE' condition for each category in the list
+                $query->orWhere('title', 'like', '%' . $category . '%');
+            }
+        }
+
+        // Check if preferred authors are available and apply filtering
+        if (!empty($preference->authors) && is_array($preference->authors)) {
+            $query->whereIn('author', $preference->authors);
+        }
+
+        // Get the articles with pagination (10 per page)
+        $articles = $query->paginate(10);
+
+        // Return the articles in the response
+        return response()->json(['data' => $articles], 200);
     }
 
-    //retrive local articles data
-    public function searcharticles(Request $request)
+    public function search(Request $request)
     {
         $query = Article::query();
 
@@ -118,21 +250,24 @@ class ArticlesController extends Controller
             $query->where('title', 'like', '%' . $request->keyword . '%');
         }
 
-        if ($request->filled('date_from')) {
-            $query->where('published_at', '>=', $request->date_from);
+        if ($request->filled('date')) {
+            $query->where('published_at', '>=', $request->date);
         }
 
-        if ($request->filled('date_to')) {
-            $query->where('published_at', '<=', $request->date_to);
+        if ($request->filled('author')) {
+            $query->where('author', '<=', $request->author);
         }
 
         if ($request->filled('source')) {
             $query->where('source', $request->source);
         }
 
-        $articles = $query->paginate(10);  // Pagination for large datasets
+        if ($request->filled('id')) {
+            $query->where('id', $request->id);
+        }
+
+        $articles = $query->paginate(10);
 
         return response()->json($articles);
     }
-
 }
