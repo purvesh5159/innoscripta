@@ -14,13 +14,11 @@ class AuthController extends Controller
     //register user
     public function register(Request $request)
     {
-       
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
         ]);
-
        
         $user = User::create([
             'name' => $request->name,
@@ -61,24 +59,20 @@ class AuthController extends Controller
         return response()->json(['message' => ' User Logged out successfully']);
     }
 
-   // Password Reset without sending email
+   // Password Reset
    public function resetPassword(Request $request)
     {
-        // Input validation
         $request->validate([
             'current_password' => 'required|string',
             'new_password' => 'required|string|min:8|confirmed',
         ]);
 
-        // Get the currently authenticated user
         $user = Auth::user();
 
-        // Check if the current password matches
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'Current password is incorrect'], 400);
         }
-
-        // Update the password
+        
         $user->password = Hash::make($request->new_password);
         $user->save();
 

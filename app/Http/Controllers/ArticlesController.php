@@ -20,47 +20,39 @@ class ArticlesController extends Controller
     // Main method to fetch articles
     public function index(Request $request)
     {
-        // Extract query parameters for searching
         $params = [
             'keyword' => $request->input('keyword'),
             'source' => $request->input('source'),
             'category' => $request->input('category'),
             'date' => $request->input('date'),
-            'page' => $request->input('page', 1),  // Default to page 1 if not provided
+            'page' => $request->input('page', 1),
         ];
 
-        // Validate that if the source is 'newsapi', the 'keyword' must be provided
         if ($params['source'] === 'newsapi' && empty($params['keyword'])) {
             return response()->json(['message' => 'Keyword is required when using NewsAPI source.'], 400);
         }
 
-        // Initialize an array to hold the articles from all sources
         $articles = [];
 
-        // If a source is specified, fetch from that source
         if ($params['source'] === 'nytimes') {
-            $nyTimesArticles = $this->newsService->fetchFromNYTimes($params);  // Fetch from NY Times
-            $articles = array_merge($articles, $nyTimesArticles); // Merge the articles from NY Times
+            $nyTimesArticles = $this->newsService->fetchFromNYTimes($params); 
+            $articles = array_merge($articles, $nyTimesArticles);
         } elseif ($params['source'] === 'newsapi') {
-            $newsApiArticles = $this->newsService->fetchFromNewsAPI($params);  // Fetch from NewsAPI
-            $articles = array_merge($articles, $newsApiArticles); // Merge the articles from NewsAPI
+            $newsApiArticles = $this->newsService->fetchFromNewsAPI($params);
+            $articles = array_merge($articles, $newsApiArticles);
         } elseif ($params['source'] === 'guardian') {
-            $guardianArticles = $this->newsService->fetchFromGuardian($params);  // Fetch from Guardian
-            $articles = array_merge($articles, $guardianArticles); // Merge the articles from Guardian
+            $guardianArticles = $this->newsService->fetchFromGuardian($params);
+            $articles = array_merge($articles, $guardianArticles);
         } else {
-            // If no specific source is provided, fetch from all sources
             $nyTimesArticles = $this->newsService->fetchFromNYTimes($params);
             $newsApiArticles = $this->newsService->fetchFromNewsAPI($params);
             $guardianArticles = $this->newsService->fetchFromGuardian($params);
             
-            // Merge all articles from NYTimes, NewsAPI, and Guardian
             $articles = array_merge($nyTimesArticles, $newsApiArticles, $guardianArticles);
         }
 
-        // Filter and process valid articles (non-empty articles)
         $validArticles = [];
         foreach ($articles as $article) {
-            // For NewsAPI
             if ($params['source'] === 'newsapi' || $params['source'] === null) {
                 if (!empty($article['title']) && !empty($article['url'])) {
                     $validArticles[] = [
@@ -72,7 +64,6 @@ class ArticlesController extends Controller
                 }
             }
 
-            // For NYTimes
             if ($params['source'] === 'nytimes' || $params['source'] === null) {
                 if (!empty($article['headline']['main']) && !empty($article['web_url'])) {
                     $validArticles[] = [
@@ -84,7 +75,6 @@ class ArticlesController extends Controller
                 }
             }
 
-            // For Guardian
             if ($params['source'] === 'guardian' || $params['source'] === null) {
                 if (!empty($article['webTitle']) && !empty($article['webUrl'])) {
                     $validArticles[] = [
@@ -97,7 +87,6 @@ class ArticlesController extends Controller
             }
         }
 
-        // Paginate the results (you can adjust pagination logic as needed)
         $perPage = 10;
         $paginatedArticles = array_slice($validArticles, ($params['page'] - 1) * $perPage, $perPage); // Paginate 10 per page
 
@@ -111,10 +100,9 @@ class ArticlesController extends Controller
         ]);
     }
 
-    // Method to fetch and store articles from different sources
     public function fetchAndStoreArticles()
     {
-        $query = 'latest'; // Example topic
+        $query = 'latest'; 
         $sources = [
             'NewsAPI' => fn() => $this->newsService->fetchFromNewsAPI($query),
             'NYTimes' => fn() => $this->newsService->fetchFromNYTimes($query),
@@ -123,11 +111,9 @@ class ArticlesController extends Controller
 
         foreach ($sources as $sourceName => $fetcher) {
             try {
-                // Log the response to check if we get data
                 $response = $fetcher();
                 \Log::info("Fetched articles from {$sourceName}", ['response' => $response]);
 
-                // Only save articles if there is a response
                 if (count($response) > 0) {
                     $this->saveArticles($response, $sourceName);
                 } else {
@@ -206,39 +192,29 @@ class ArticlesController extends Controller
 
     public function personalizedFeed(Request $request)
     {
-        // Retrieve the user's preferences from the database
         $preference = Preference::where('user_id', Auth::id())->first();
 
-        // Check if preferences exist
         if (!$preference) {
             return response()->json(['message' => 'No preferences found'], 404);
         }
 
-        // Initialize the query for fetching articles
         $query = Article::query();
 
-        // Check if preferred sources are available and apply filtering
         if (!empty($preference->sources) && is_array($preference->sources)) {
             $query->whereIn('source', $preference->sources);
         }
 
-        // Check if preferred categories are available and apply filtering
         if (!empty($preference->categories) && is_array($preference->categories)) {
             foreach ($preference->categories as $category) {
-                // Use orWhere to apply 'LIKE' condition for each category in the list
                 $query->orWhere('title', 'like', '%' . $category . '%');
             }
         }
 
-        // Check if preferred authors are available and apply filtering
         if (!empty($preference->authors) && is_array($preference->authors)) {
             $query->whereIn('author', $preference->authors);
         }
 
-        // Get the articles with pagination (10 per page)
         $articles = $query->paginate(10);
-
-        // Return the articles in the response
         return response()->json(['data' => $articles], 200);
     }
 
