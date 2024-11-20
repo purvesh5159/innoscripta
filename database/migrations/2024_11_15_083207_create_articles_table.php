@@ -15,12 +15,12 @@ return new class extends Migration
     {
         Schema::create('articles', function (Blueprint $table) {
             $table->id();
-            $table->string('title',191);
-            $table->text('description');
-            $table->string('url',191)->unique();
+            $table->string('title', 191);
+            $table->text('description')->nullable();
+            $table->string('url', 191)->unique();
             $table->timestamp('published_at');
-            $table->string('source',191);
-            $table->string('source_id',191)->unique();
+            $table->string('source', 191);
+            $table->string('source_id', 191)->unique()->nullable();
             $table->timestamps();
 
             // Indexes for fast searches

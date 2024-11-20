@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Services\NewsService;
 use App\Models\Article;
 use App\Models\Preference;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ArticlesController extends Controller
@@ -16,6 +17,75 @@ class ArticlesController extends Controller
     {
         $this->newsService = $newsService;
     }
+
+
+    /**
+     * @OA\Get(
+     *     path="/api/articles",
+     *     summary="Fetch articles",
+     *     description="Fetch articles from different sources like NewsAPI, NYTimes, and Guardian.",
+     *     tags={"Articles"},
+     *     @OA\Parameter(
+     *         name="keyword",
+     *         in="query",
+     *         required=false,
+     *         description="Search keyword for articles",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="source",
+     *         in="query",
+     *         required=false,
+     *         description="Source of the news (newsapi, nytimes, guardian)",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="category",
+     *         in="query",
+     *         required=false,
+     *         description="Category of the news",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="date",
+     *         in="query",
+     *         required=false,
+     *         description="Date of the article",
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="page",
+     *         in="query",
+     *         required=false,
+     *         description="Page number for pagination",
+     *         @OA\Schema(type="integer", default=1)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Articles fetched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="array", items=@OA\Items(
+     *                 @OA\Property(property="source", type="string"),
+     *                 @OA\Property(property="title", type="string"),
+     *                 @OA\Property(property="description", type="string"),
+     *                 @OA\Property(property="publishedAt", type="string")
+     *             )),
+     *             @OA\Property(property="pagination", type="object", 
+     *                 @OA\Property(property="current_page", type="integer"),
+     *                 @OA\Property(property="total", type="integer"),
+     *                 @OA\Property(property="per_page", type="integer")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Bad request - missing keyword for NewsAPI source",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Keyword is required when using NewsAPI source.")
+     *         )
+     *     )
+     * )
+     */
 
     // Main method to fetch articles
     public function index(Request $request)
@@ -100,6 +170,29 @@ class ArticlesController extends Controller
         ]);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/fetch-and-store-articles",
+     *     summary="Fetch and store articles from external sources",
+     *     description="Fetches and stores articles from NewsAPI, NYTimes, and Guardian.",
+     *     tags={"Articles"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Articles fetched and stored successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Articles fetched and stored successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Server error - failed to fetch articles",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Failed to fetch articles")
+     *         )
+     *     )
+     * )
+     */
+
     public function fetchAndStoreArticles()
     {
         $query = 'latest'; 
@@ -177,6 +270,41 @@ class ArticlesController extends Controller
         }
     }
 
+     /**
+     * @OA\Get(
+     *     path="/api/articles/{id}",
+     *     summary="Retrieve a single article by ID",
+     *     description="Fetches a single article based on its ID from NewsAPI or NYTimes.",
+     *     tags={"Articles"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         description="ID of the article to retrieve",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Article fetched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="object", 
+     *                 @OA\Property(property="source", type="string"),
+     *                 @OA\Property(property="title", type="string"),
+     *                 @OA\Property(property="description", type="string"),
+     *                 @OA\Property(property="publishedAt", type="string")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Article not found",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Article not found")
+     *         )
+     *     )
+     * )
+     */
+
     // Retrieve a single article by ID
     public function show($id, Request $request)
     {
@@ -189,6 +317,33 @@ class ArticlesController extends Controller
 
         return response()->json(['data' => $article]);
     }
+
+     /**
+     * @OA\Get(
+     *     path="/api/personalized-feed",
+     *     summary="Get personalized news feed for the user",
+     *     description="Fetches a personalized news feed for the authenticated user based on their preferences.",
+     *     tags={"Articles"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Personalized feed fetched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="array", items=@OA\Items(
+     *                 @OA\Property(property="title", type="string"),
+     *                 @OA\Property(property="description", type="string"),
+     *                 @OA\Property(property="publishedAt", type="string")
+     *             ))
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="No preferences found for the user",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="No preferences found")
+     *         )
+     *     )
+     * )
+     */
 
     public function personalizedFeed(Request $request)
     {
@@ -217,6 +372,61 @@ class ArticlesController extends Controller
         $articles = $query->paginate(10);
         return response()->json(['data' => $articles], 200);
     }
+    
+    /**
+     * @OA\Get(
+     *     path="/api/search",
+     *     summary="Search articles",
+     *     description="Searches articles based on various filters like keyword, date, author, and source.",
+     *     tags={"Articles"},
+     *     @OA\Parameter(
+     *         name="keyword",
+     *         in="query",
+     *         required=false,
+     *         description="Keyword for searching articles",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="date",
+     *         in="query",
+     *         required=false,
+     *         description="Filter articles by date",
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="author",
+     *         in="query",
+     *         required=false,
+     *         description="Filter articles by author",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="source",
+     *         in="query",
+     *         required=false,
+     *         description="Filter articles by source",
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="query",
+     *         required=false,
+     *         description="Filter by article ID",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Articles fetched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="array", items=@OA\Items(
+     *                 @OA\Property(property="title", type="string"),
+     *                 @OA\Property(property="description", type="string"),
+     *                 @OA\Property(property="publishedAt", type="string")
+     *             ))
+     *         )
+     *     )
+     * )
+     */
 
     public function search(Request $request)
     {
@@ -245,5 +455,50 @@ class ArticlesController extends Controller
         $articles = $query->paginate(10);
 
         return response()->json($articles);
+    }
+
+     /**
+     * @OA\Get(
+     *     path="/api/getallarticles",
+     *     summary="Get all articles",
+     *     description="Fetches all articles from the database, optionally cached for performance.",
+     *     tags={"Articles"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="All articles fetched successfully",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="array", items=@OA\Items(
+     *                 @OA\Property(property="source", type="string"),
+     *                 @OA\Property(property="title", type="string"),
+     *                 @OA\Property(property="description", type="string"),
+     *                 @OA\Property(property="publishedAt", type="string")
+     *             ))
+     *         )
+     *     )
+     * )
+     */
+
+    public function getAllArticles()
+    {
+        $articles = Cache::remember('articles_list', 60, function () {
+            return Article::latest()->paginate(10);
+        });
+
+        return response()->json($articles);
+    }
+
+    /* Article Policy */
+    public function update(Request $request, Article $article)
+    {
+        $this->authorize('update', $article);
+        $article->update($request->all());
+        return response()->json(['message' => 'Article updated successfully']);
+    }
+
+    public function delete(Article $article)
+    {
+        $this->authorize('delete', $article);
+        $article->delete();
+        return response()->json(['message' => 'Article deleted successfully']);
     }
 }

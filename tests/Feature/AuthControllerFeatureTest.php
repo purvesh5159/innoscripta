@@ -1,14 +1,16 @@
 <?php
+
 namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
-class AuthControllerTest extends TestCase
+class AuthControllerFeatureTest extends TestCase
 {
-    use RefreshDatabase; // Use database refresh between tests
+    use RefreshDatabase;
 
     // Test user registration
     public function test_register_user()
@@ -25,17 +27,15 @@ class AuthControllerTest extends TestCase
                      'access_token',
                      'token_type',
                      'message',
+                 ])
+                 ->assertJson([
+                     'message' => 'User registered successfully',
                  ]);
     }
 
     // Test user login
     public function test_login_user()
     {
-        $user = User::factory()->create([
-            'email' => 'john@example.com',
-            'password' => Hash::make('password123'),
-        ]);
-
         $response = $this->postJson('/api/login', [
             'email' => 'john@example.com',
             'password' => 'password123',
@@ -46,6 +46,9 @@ class AuthControllerTest extends TestCase
                      'access_token',
                      'token_type',
                      'message',
+                 ])
+                 ->assertJson([
+                     'message' => 'User Login successfully',
                  ]);
     }
 
@@ -59,7 +62,9 @@ class AuthControllerTest extends TestCase
                          ->postJson('/api/logout');
 
         $response->assertStatus(200) // Assert HTTP 200 OK
-                 ->assertJson(['message' => 'User Logged out successfully']);
+                 ->assertJson([
+                     'message' => 'User logged out successfully',
+                 ]);
     }
 
     // Test password reset
@@ -78,7 +83,9 @@ class AuthControllerTest extends TestCase
         ]);
 
         $response->assertStatus(200) // Assert HTTP 200 OK
-                 ->assertJson(['message' => 'Password reset successfully']);
+                 ->assertJson([
+                     'message' => 'Password reset successfully',
+                 ]);
     }
 
     // Test password reset with incorrect current password
@@ -97,6 +104,8 @@ class AuthControllerTest extends TestCase
         ]);
 
         $response->assertStatus(400) // Assert HTTP 400 Bad Request
-                 ->assertJson(['message' => 'Current password is incorrect']);
+                 ->assertJson([
+                     'message' => 'Current password is incorrect',
+                 ]);
     }
 }

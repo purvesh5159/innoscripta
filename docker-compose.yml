@@ -1,3 +1,4 @@
+
 services:
   app:
     build:
@@ -19,8 +20,8 @@ services:
     restart: always
     environment:
       MYSQL_DATABASE: innoscripta
-      MYSQL_ALLOW_EMPTY_PASSWORD: 1
-      MYSQL_ROOT_PASSWORD:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_ROOT_PASSWORD: ""
     ports:
       - "3306:3306"
     volumes:
@@ -33,7 +34,8 @@ services:
     restart: always
     environment:
       PMA_HOST: db
-      MYSQL_ROOT_PASSWORD: rootsecret
+      PMA_USER: root
+      PMA_PASSWORD: ""
     ports:
       - "8080:80"
 
