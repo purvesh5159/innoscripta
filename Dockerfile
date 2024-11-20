@@ -11,10 +11,21 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libonig-dev \
     libxml2-dev \
+    libzip-dev \
+    libmemcached-dev \
     curl \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo_mysql mbstring gd xml bcmath \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-install \
+        pdo_mysql \
+        mbstring \
+        gd \
+        xml \
+        bcmath \
+        zip \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
@@ -24,6 +35,19 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Set the working directory inside the container
 WORKDIR /var/www/html
+
+# Copy composer files first to leverage Docker cache
+COPY composer.json composer.lock ./
+
+# Set environment variable to allow Composer to run as root
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
+# Install PHP dependencies
+RUN composer install \
+    --no-scripts \
+    --no-autoloader \
+    --no-dev \
+    --prefer-dist
 
 # Copy the entire Laravel project to the container
 COPY . .
