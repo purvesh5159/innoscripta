@@ -31,4 +31,4 @@
     Port: 3306
     Database: innoscripta
     Username: root
-    Password: rootsecret
+    Password: root
